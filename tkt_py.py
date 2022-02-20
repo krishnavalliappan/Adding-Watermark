@@ -1,20 +1,34 @@
 from tkinter import *
 from tkmacosx import Button
-from tkinter.filedialog import askopenfiles
+from tkinter.filedialog import askopenfiles, asksaveasfile, askdirectory
 from PIL import Image, ImageDraw, ImageFont
 from tkinter import messagebox
+
+
+def validate_distance(input_value):
+    if input_value == "":
+        return True
+    elif not input_value.isdigit():
+        return False
+    else:
+        return True
 
 
 class Watermark(Tk):
     def __init__(self):
         super().__init__()
+        self.images_list = []
+        self.save_file_name = None
+        self.height_value = None
+        self.width_value = None
+        self.font_size_entry = None
+        self.font_size_var = None
         self.position_opt_hor = ["From Left", "From Right", "Center"]
         self.position_opt_vert = ["From Top", "From Bottom", "Center"]
         self.position_var_vert = None
         self.rotate_angle = None
         self.opacity_var = None
         self.rotate_var = None
-        self.font_size_entry = None
         self.text_to_add = None
         self.height_var = None
         self.width_var = None
@@ -74,10 +88,15 @@ class Watermark(Tk):
         self.width_var.set(default)
         self.height_var = IntVar()
         self.height_var.set(default)
-        width_value = Entry(self.sub_text_frame, width=10, textvariable=self.width_var)
-        width_value.grid(row=7, column=2, padx=10, pady=10)
-        height_value = Entry(self.sub_text_frame, width=10, textvariable=self.height_var)
-        height_value.grid(row=8, column=2, padx=10, pady=10)
+
+        self.width_value = Entry(self.sub_text_frame, width=10, textvariable=self.width_var)
+        self.width_value.grid(row=7, column=2, padx=10, pady=10)
+        self.width_value.config(validate="key",
+                                validatecommand=(self.sub_text_frame.register(validate_distance), "%P"))
+        self.height_value = Entry(self.sub_text_frame, width=10, textvariable=self.height_var)
+        self.height_value.grid(row=8, column=2, padx=10, pady=10)
+        self.height_value.config(validate="key",
+                                 validatecommand=(self.sub_text_frame.register(validate_distance), "%P"))
 
     def calculate_position(self, size):
         text_width, text_height = size
@@ -97,7 +116,44 @@ class Watermark(Tk):
 
         return int(width), int(height)
 
-    def add_text_labels(self):
+    def validate_font(self, input_value):
+        if input_value == "":
+            return True
+        elif not input_value.isdigit():
+            return False
+        elif not int(input_value) <= 1000:
+            messagebox.showerror("Font Size Error", "Font Size can not be larger than 1000")
+            self.font_size_entry.insert(0, 12)
+            self.font_size_entry.delete(2, "end")
+            self.font_size_entry.config(validate="key",
+                                        validatecommand=(self.font_size_entry.register(self.validate_font), "%P"))
+            self.sub_text_frame.focus()
+            self.font_size_entry.focus()
+            return False
+        else:
+            return True
+
+    def validate_rot_angle(self, input_value):
+        if input_value == "":
+            return True
+        elif not input_value.isdigit() and "-" not in input_value:
+            return False
+        elif not -360 <= int(input_value) <= 1000:
+            messagebox.showerror("Angle Error", "Rotation Angle cannot exceed 360")
+            self.rotate_angle.insert(0, "0")
+            self.rotate_angle.delete(1, "end")
+            self.rotate_angle.config(validate="key",
+                                     validatecommand=(self.rotate_angle.register(self.validate_rot_angle), "%P"))
+            self.sub_text_frame.focus()
+            self.rotate_angle.focus()
+            return False
+        else:
+            return True
+
+    def add_text_fields(self):
+        """
+        This Function will create fields related to add watermark via Text.
+        """
         text_label = Label(self.sub_text_frame, text="Enter your Watermark text")
         text_label.grid(row=3, column=0, padx=10, pady=10)
         # Text to add
@@ -113,8 +169,12 @@ class Watermark(Tk):
         # font_size
         font_size_label = Label(self.sub_text_frame, text="Font Size")
         font_size_label.grid(row=5, column=0, padx=10, pady=10)
-        self.font_size_entry = Entry(self.sub_text_frame, width=10)
+        self.font_size_var = IntVar()
+        self.font_size_entry = Entry(self.sub_text_frame, width=10, textvariable=self.font_size_var)
+        self.font_size_var.set(12)
         self.font_size_entry.grid(row=5, column=1, padx=10, pady=10)
+        self.font_size_entry.config(validate="key",
+                                    validatecommand=(self.font_size_entry.register(self.validate_font), "%P"))
         #     opacity
         opacity_label = Label(self.sub_text_frame, text="Opacity percentage")
         opacity_label.grid(row=5, column=2, padx=10, pady=10)
@@ -137,8 +197,11 @@ class Watermark(Tk):
         rotate_check.grid(row=6, column=0, padx=10, pady=10)
         rotate_angle_label = Label(self.sub_text_frame, text="Specify Rotate Angle")
         rotate_angle_label.grid(row=6, column=1, padx=10, pady=10)
-        self.rotate_angle = Entry(self.sub_text_frame, width=10, state="disabled")
+        self.rotate_angle = Entry(self.sub_text_frame, width=10)
         self.rotate_angle.grid(row=6, column=2, padx=10, pady=10)
+        self.rotate_angle.insert(0, "0")
+        self.rotate_angle.config(validate="key", state="disabled",
+                                 validatecommand=(self.rotate_angle.register(self.validate_rot_angle), "%P"))
 
     def check_image_upload(self):
         if not self.file_path:
@@ -154,30 +217,64 @@ class Watermark(Tk):
         self.sub_text_frame = Frame(self)
         self.sub_text_frame.grid(row=3, column=0, columnspan=2)
 
-        self.add_text_labels()
+        self.add_text_fields()
         self.rotate_txt_img()
         self.position()
-        submit_btn = Button(self.sub_text_frame, text="Submit", command=self.add_watermark)
+        submit_btn = Button(self.sub_text_frame, text="Submit", command=lambda: self.add_watermark("submit"))
         submit_btn.grid(row=9, column=1, padx=10, pady=10)
+        save_btn = Button(self.sub_text_frame, text="Save", command=self.save)
+        save_btn.grid(row=9, column=2, padx=10, pady=10)
 
-    def add_watermark(self):
-        with Image.open(self.file_path[0].name) as self.image:
-            draw = ImageDraw.Draw(self.image)
-            font_ = ImageFont.truetype(f"fonts/{self.variable.get()}.ttf", size=int(self.font_size_entry.get()))
-            # draw.text((10, 25), text_to_add.get(), font=font_, fill="white")
-            if self.rotate_var.get() == 1:
-                text = self.text_to_add.get()
+    def add_watermark(self, caller):
+        text = self.text_to_add.get()
+        if text == "":
+            self.sub_text_frame.focus()
+            self.text_to_add.focus()
+            messagebox.showerror("Error", "Enter some Text to add as Watermark")
+            return False
+        self.images_list = []
+        for file in self.file_path:
+            with Image.open(file.name) as self.image:
+                draw = ImageDraw.Draw(self.image)
+                font_ = ImageFont.truetype(f"fonts/{self.variable.get()}.ttf", size=int(self.font_size_var.get()))
+                if self.rotate_angle.get() == "":
+                    self.rotate_angle.insert(0, 0)
+                elif not self.rotate_var.get() == 1:
+                    self.rotate_angle.config(state="normal")
+                    self.rotate_angle.delete(0, "end")
+                    self.rotate_angle.insert(0, 0)
+                    self.rotate_angle.config(state="disabled")
                 text_width, text_height = draw.textsize(text, font=font_)
                 txt_img = Image.new("RGBA", (text_width, text_height), (0, 0, 0, 0))
                 draw_txt = ImageDraw.Draw(txt_img)
                 draw_txt.text((0, 0), text=text, font=font_,
                               fill=(255, 255, 255, int((self.opacity_var.get() / 100) * 255)))
-                txt_img = txt_img.rotate(int(self.rotate_angle.get()), expand=True)
+                txt_img = txt_img.rotate(-1 * int(self.rotate_angle.get()), expand=True)
                 self.image.paste(txt_img, self.calculate_position(txt_img.size), txt_img)
-            self.image.show()
+                self.images_list.append(self.image)
+                if caller == "submit":
+                    self.image.show()
 
     def add_using_image(self):
         if self.check_image_upload():
             return None
         if self.sub_text_frame:
             self.sub_text_frame.destroy()
+
+    def save(self):
+        if not self.add_watermark("save"):
+            return False
+        files = [('JPG', '*.jpg'),
+                 ('PNG', '*.png'),
+                 ('JPEG', '*.jpeg')]
+        if len(self.file_path) > 1:
+            file_dir = askdirectory(title="Select a directory to save images")
+            for i in range(len(self.file_path)):
+                image_file_name = f"{file_dir}/copy_of_{self.file_path[i].name.split('/')[-1]}"
+                print(image_file_name)
+                self.images_list[i].convert("RGB").save(image_file_name)
+        else:
+            self.save_file_name = asksaveasfile(filetypes=files, defaultextension=files, title="Select directory and "
+                                                                                               "file name")
+            if self.save_file_name:
+                self.images_list[0].convert("RGB").save(self.save_file_name.name)
